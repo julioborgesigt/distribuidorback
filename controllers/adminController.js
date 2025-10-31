@@ -619,3 +619,23 @@ exports.unmarkAsCumprido = async (req, res) => {
     res.status(500).json({ error: 'Erro interno do servidor' });
   }
 };
+
+// NOVA FUNÇÃO: Retorna a contagem de processos não atribuídos
+exports.getUnassignedCount = async (req, res) => {
+  try {
+    // Conta apenas processos onde o userId (chave estrangeira) é NULL
+    const count = await Process.count({
+      where: { 
+        userId: null,
+        cumprido: false // <-- ✅ CORREÇÃO ADICIONADA
+      }
+    });
+    
+    // Retorna a contagem
+    res.status(200).json({ count });
+
+  } catch (error) {
+    console.error('Erro ao contar processos não atribuídos:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+};

@@ -12,6 +12,9 @@ router.use(autenticarAdmin);
 // Rota para listar usuários
 router.get('/users', adminController.listUsers);
 
+// ✅ NOVA ROTA: Retorna contagem para o alerta do dashboard
+router.get('/stats/unassigned-count', adminController.getUnassignedCount);
+
 // Rota da página admin (REMOVIDA)
 // router.get('/', adminController.getAdminPage); // REMOVIDA
 

@@ -1,12 +1,19 @@
 // server.js (Apenas Admin)
 require('dotenv').config();
 const express = require('express');
+const cors = require('cors');
 const { sequelize } = require('./models');
 const adminRoutes = require('./routes/admin');
 const authRoutes = require('./routes/auth');
 // const userRoutes = require('./routes/user'); // REMOVIDO
 
 const app = express();
+
+
+app.use(cors({
+  origin: 'https://distribuidorvue.onrender.com/' // <-- 3. Coloque a URL do seu frontend
+}));
+
 
 const PORT = process.env.PORT || 3000;
 

@@ -11,7 +11,7 @@ const app = express();
 
 
 app.use(cors({
-  origin: 'https://distribuidorvue.onrender.com' // <-- 3. Coloque a URL do seu frontend
+  origin: 'http://localhost:3001' // <-- 3. Coloque a URL do seu frontend
 }));
 
 

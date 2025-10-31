@@ -4,6 +4,7 @@
 const fs = require('fs');
 const csvParser = require('csv-parser');
 const { User, Process } = require('../models');
+const { Op, literal } = require('sequelize');
 const iconv = require('iconv-lite');
 const bcryptjs = require('bcryptjs');
 // Função que enviava página HTML (REMOVIDA)
@@ -135,25 +136,170 @@ exports.uploadCSV = (req, res) => {
     });
 };
 
-// Lista todos os processos em formato JSON
+// Função para converter filtros de query (que podem ser string ou array) para array
+const parseArrayFilter = (val) => {
+  if (!val) return null;
+  return Array.isArray(val) ? val : [val];
+};
+
+// Lista processos com paginação, filtros e ordenação do lado do servidor
 exports.listProcesses = async (req, res) => {
   try {
-    console.log("listProcesses: loginType =", req.loginType);
-    let processes;
-    if (req.loginType === 'admin_super') {
-      // Se o login foi feito como admin_super, lista todos os processos
-      processes = await Process.findAll({ include: User });
-    } else {
-      // Para admin_padrao (ou outro), lista apenas os processos atribuídos ao usuário logado
-      processes = await Process.findAll({ 
-        where: { userId: req.userId },
-        include: User 
-      });
+    // 1. EXTRAIR PARÂMETROS DA QUERY (VINDOS DO VUETIFY)
+    const {
+      page = 1,
+      itemsPerPage = 10, // O v-data-table-server envia -1 para "Todos",
+      sortBy = '[]',
+      search,      // Busca por Nª do Processo
+      classe,      // Filtro de array
+      assunto,     // Filtro de array
+      tarjas,      // Filtro de array
+      userId,      // Filtro de array (só para admin_super)
+      prazo,       // Filtro ('vencido' ou 'a_vencer')
+      cumprido     // Filtro (true, false, ou null)
+    } = req.query;
+
+    // 2. PREPARAR OPÇÕES BÁSICAS DE PAGINAÇÃO
+    const limit = parseInt(itemsPerPage, 10);
+    const isAll = limit === -1;
+    const offset = (parseInt(page, 10) - 1) * limit;
+
+    let options = {
+      where: {},
+      include: [{
+        model: User,
+        attributes: ['id', 'nome'] // Inclui o nome do usuário associado
+      }],
+      offset: isAll ? undefined : offset,
+      limit: isAll ? undefined : limit,
+      order: []
+    };
+
+    // 3. FILTRO DE SEGURANÇA (O MAIS IMPORTANTE)
+    // Se o usuário não for 'admin_super', ele SÓ pode ver os processos dele.
+    if (req.loginType !== 'admin_super') {
+      options.where.userId = req.userId;
     }
-    res.json(processes);
+
+    // 4. CONSTRUIR FILTROS DINÂMICOS (WHERE)
+
+    // Filtro de Busca (pelo Nº do Processo)
+    if (search) {
+      options.where.numero_processo = { [Op.like]: `%${search}%` };
+    }
+
+    // Filtro de Status 'cumprido' (true, false, ou null para "Todos")
+    if (cumprido && cumprido !== 'null') {
+      options.where.cumprido = (cumprido === 'true');
+    }
+
+    // Filtros de Array (classe, assunto, tarjas)
+    const classeFilter = parseArrayFilter(classe);
+    if (classeFilter) {
+      options.where.classe_principal = { [Op.in]: classeFilter };
+    }
+
+    const assuntoFilter = parseArrayFilter(assunto);
+    if (assuntoFilter) {
+      options.where.assunto_principal = { [Op.in]: assuntoFilter };
+    }
+
+    const tarjasFilter = parseArrayFilter(tarjas);
+    if (tarjasFilter) {
+      options.where.tarjas = { [Op.in]: tarjasFilter };
+    }
+
+    // Filtro de 'userId' (Admin Super pode filtrar por usuários específicos)
+    // Filtro de 'userId' (Admin Super pode filtrar por usuários específicos)
+    // 1. Lê os novos parâmetros da query
+    // 3. FILTROS DE SEGURANÇA E USUÁRIO (CORRIGIDO)
+    const userIdFilter = parseArrayFilter(userId); 
+    const shouldIncludeNA = (req.query.includeNA === 'true');
+
+    if (req.loginType !== 'admin_super') {
+      // É um admin_padrao. Ele SÓ pode ver os seus.
+      // A lógica de 'Não Atribuído' ou filtro de outros usuários é ignorada.
+      options.where.userId = req.userId;
+
+    } else {
+      // É um admin_super. Ele tem controle total dos filtros.
+      let userWhereClause = null;
+
+      if (userIdFilter && userIdFilter.length > 0) {
+        userWhereClause = { [Op.in]: userIdFilter };
+      }
+
+      if (shouldIncludeNA) {
+        if (userWhereClause) {
+          // Filtro: (userId IN [1, 5] OR userId IS NULL)
+          options.where.userId = {
+            [Op.or]: [ userWhereClause, null ]
+          };
+        } else {
+          // Filtro: (userId IS NULL)
+          options.where.userId = null;
+        }
+      } else if (userWhereClause) {
+        // Filtro: (userId IN [1, 5])
+        options.where.userId = userWhereClause;
+      }
+      // Se nenhum filtro de usuário for aplicado, não adiciona 'where.userId'
+    }
+
+    // Filtro de Prazo ('vencido' ou 'a_vencer')
+    if (prazo) {
+      // Cria a query SQL literal para calcular a data de vencimento
+      // (Assume que 'prazo_processual' é um NÚMERO em string, ex: "10")
+      const prazoQuery = `DATE_ADD(data_intimacao, INTERVAL CAST(prazo_processual AS UNSIGNED) DAY)`;
+      
+      // Ignora processos sem data de intimação
+      options.where.data_intimacao = { [Op.not]: null };
+      
+      // Inicializa 'Op.and' se não existir
+      options.where[Op.and] = (options.where[Op.and] || []); 
+
+      if (prazo === 'vencido') {
+        // Vencido = Data de Vencimento < Hoje
+        options.where[Op.and].push(literal(`${prazoQuery} < CURDATE()`));
+      } else if (prazo === 'a_vencer') {
+        // A Vencer = Data de Vencimento >= Hoje
+        options.where[Op.and].push(literal(`${prazoQuery} >= CURDATE()`));
+      }
+    }
+
+    // 5. CONSTRUIR ORDENAÇÃO DINÂMICA (ORDER BY)
+    const sortConfig = JSON.parse(sortBy);
+    if (sortConfig.length > 0) {
+      options.order = sortConfig.map(s => {
+        // Se a chave for 'user', ordena pela tabela 'User' associada
+        if (s.key === 'user') {
+          return [User, 'nome', s.order];
+        }
+        // Se a chave for 'prazoRestanteNum' (coluna virtual), ordena pelo cálculo
+        if (s.key === 'prazoRestanteNum') {
+          const prazoQuery = `DATE_ADD(data_intimacao, INTERVAL CAST(prazo_processual AS UNSIGNED) DAY)`;
+          return [literal(prazoQuery), s.order];
+        }
+        // Ordenação padrão
+        return [s.key, s.order];
+      });
+    } else {
+      // Ordenação padrão se nenhuma for fornecida
+      options.order = [['data_intimacao', 'DESC']];
+    }
+
+    // 6. EXECUTAR A CONSULTA E RETORNAR
+    // Usa findAndCountAll para pegar as linhas da página ATUAL e o TOTAL de linhas
+    const { count, rows } = await Process.findAndCountAll(options);
+
+    res.json({
+      items: rows,
+      totalItems: count
+    });
+
   } catch (error) {
-    console.error(error);
-    res.status(500).send('Erro ao buscar processos.');
+    console.error('Erro ao buscar processos com paginação:', error);
+    res.status(500).json({ error: 'Erro interno do servidor', details: error.message });
   }
 };
 
@@ -376,7 +522,8 @@ exports.updateIntim = async (req, res) => {
 // Lista usuários (apenas matrícula e nome)
 exports.listUsers = async (req, res) => {
   try {
-    const users = await User.findAll({ attributes: ['matricula', 'nome'] });
+    // Adicionamos 'id' aos atributos
+    const users = await User.findAll({ attributes: ['id', 'matricula', 'nome'] }); 
     res.json(users);
   } catch (error) {
     console.error(error);

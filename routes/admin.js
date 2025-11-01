@@ -15,8 +15,9 @@ router.get('/users', adminController.listUsers);
 // ✅ NOVA ROTA: Retorna contagem para o alerta do dashboard
 router.get('/stats/unassigned-count', adminController.getUnassignedCount);
 
-// Rota da página admin (REMOVIDA)
-// router.get('/', adminController.getAdminPage); // REMOVIDA
+// ✅ NOVA ROTA: Retorna todas as estatísticas do dashboard
+router.get('/stats/dashboard', adminController.getDashboardStats);
+
 
 // Rotas da API de Admin
 router.post('/upload', upload.single('csvFile'), adminController.uploadCSV);

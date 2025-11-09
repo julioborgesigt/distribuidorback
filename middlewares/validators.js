@@ -122,7 +122,7 @@ const validateUpdateObservacoes = [
 // Validadores para Bulk Operations
 const validateBulkOperation = [
   body('processIds')
-    .isArray({ min: 1 }).withMessage('Selecione pelo menos um processo')
+    .isArray({ min: 1, max: 100 }).withMessage('Selecione entre 1 e 100 processos por operação')
     .custom((value) => {
       if (!value.every(id => Number.isInteger(id) && id > 0)) {
         throw new Error('IDs de processos inválidos');
@@ -136,7 +136,7 @@ const validateBulkOperation = [
 // Validadores para Bulk Assign
 const validateBulkAssign = [
   body('processIds')
-    .isArray({ min: 1 }).withMessage('Selecione pelo menos um processo')
+    .isArray({ min: 1, max: 100 }).withMessage('Selecione entre 1 e 100 processos por operação')
     .custom((value) => {
       if (!value.every(id => Number.isInteger(id) && id > 0)) {
         throw new Error('IDs de processos inválidos');

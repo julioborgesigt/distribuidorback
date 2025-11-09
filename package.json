@@ -6,7 +6,11 @@
   "scripts": {
     "start": "NODE_ENV=production node server.js",
     "dev": "NODE_ENV=development nodemon server.js",
-    "check": "node -c server.js && node -c controllers/*.js && node -c middlewares/*.js",
+    "check": "node -c server.js && node -c controllers/*.js && node -c middlewares/*.js && node -c utils/*.js",
+    "check:security": "npm audit && npm outdated",
+    "logs:view": "tail -f logs/combined.log",
+    "logs:errors": "tail -f logs/error.log",
+    "logs:clear": "rm -f logs/*.log && mkdir -p logs",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
@@ -23,6 +27,8 @@
     "moment-timezone": "^0.5.47",
     "multer": "^1.4.5-lts.1",
     "mysql2": "^3.12.0",
-    "sequelize": "^6.31.1"
+    "sequelize": "^6.31.1",
+    "winston": "^3.18.3",
+    "xss": "^1.0.15"
   }
 }

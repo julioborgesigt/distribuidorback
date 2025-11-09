@@ -1,5 +1,4 @@
 // server.js (Apenas Admin)
-app.set('trust proxy', true);
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -35,6 +34,7 @@ if (missingVars.length > 0) {
 
 const app = express();
 
+app.set('trust proxy', true);
 // Configuração de Segurança - Helmet
 app.use(helmet({
   contentSecurityPolicy: {

@@ -1,4 +1,5 @@
 // server.js (Apenas Admin)
+app.set('trust proxy', true);
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');

@@ -33,7 +33,7 @@ module.exports = (sequelize) => {
         len: [8, 100]
       }
     },
-    // Novo campo para identificar se \u00e9 a senha padr\u00e3o
+    // Campo para identificar se é a senha padrão
     senha_padrao: {
       type: DataTypes.BOOLEAN,
       allowNull: false,

@@ -15,7 +15,30 @@
     "logs:view": "tail -f logs/combined.log",
     "logs:errors": "tail -f logs/error.log",
     "logs:clear": "rm -f logs/*.log && mkdir -p logs",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "NODE_ENV=test jest --coverage --verbose",
+    "test:watch": "NODE_ENV=test jest --watch",
+    "test:unit": "NODE_ENV=test jest --testPathPattern=tests/unit"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "coverageDirectory": "coverage",
+    "collectCoverageFrom": [
+      "controllers/**/*.js",
+      "middlewares/**/*.js",
+      "utils/**/*.js",
+      "!node_modules/**"
+    ],
+    "testMatch": [
+      "**/tests/**/*.test.js"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "branches": 5,
+        "functions": 5,
+        "lines": 5,
+        "statements": 5
+      }
+    }
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",
@@ -33,10 +56,15 @@
     "multer": "^1.4.5-lts.1",
     "mysql2": "^3.12.0",
     "sequelize": "^6.31.1",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1",
     "winston": "^3.18.3",
     "xss": "^1.0.15"
   },
   "devDependencies": {
-    "nodemon": "^3.1.0"
+    "@types/jest": "^30.0.0",
+    "jest": "^30.2.0",
+    "nodemon": "^3.1.0",
+    "supertest": "^7.1.4"
   }
 }

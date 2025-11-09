@@ -4,6 +4,8 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
+const swaggerUi = require('swagger-ui-express');
+const swaggerSpec = require('./utils/swagger');
 const { sequelize } = require('./models');
 const adminRoutes = require('./routes/admin');
 const authRoutes = require('./routes/auth');
@@ -15,6 +17,11 @@ const {
   validateJSON
 } = require('./middlewares/errorHandler');
 const { sanitizeInput } = require('./middlewares/sanitizer');
+const {
+  validateAjaxHeader,
+  validateOriginForCriticalOps,
+  addSecurityHeaders
+} = require('./middlewares/csrfProtection');
 // const userRoutes = require('./routes/user'); // REMOVIDO
 
 // Validação de Variáveis de Ambiente Obrigatórias
@@ -32,7 +39,7 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"], // Swagger UI precisa de unsafe-inline
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "https:"],
       connectSrc: ["'self'"],
@@ -96,7 +103,7 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   exposedHeaders: ['Content-Range', 'X-Content-Range'],
   maxAge: 600 // Cache da preflight request por 10 minutos
 }));
@@ -121,19 +128,58 @@ app.use(validateJSON);
 // Middleware de sanitização XSS
 app.use(sanitizeInput);
 
+// Middlewares de proteção CSRF e segurança adicional
+app.use(addSecurityHeaders);
+app.use(validateAjaxHeader);
+app.use(validateOriginForCriticalOps);
+
 // --- 1. ROTAS DE API ---
 // Todas as suas rotas de API (agora apenas admin e auth)
 app.use('/api/admin', adminRoutes);
 app.use('/api/auth', authRoutes);
 // app.use('/api/user', userRoutes); // REMOVIDO
 
+// --- DOCUMENTAÇÃO SWAGGER/OpenAPI ---
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: 'Distribuidor API Docs'
+}));
+
 // --- 2. ROTA RAIZ ---
-// Adiciona uma rota GET simples para a raiz do servidor
+/**
+ * @swagger
+ * /:
+ *   get:
+ *     summary: Rota raiz
+ *     description: Verifica se o servidor está respondendo
+ *     tags: [Sistema]
+ *     security: []
+ *     responses:
+ *       200:
+ *         description: Servidor está rodando
+ */
 app.get('/', (req, res) => {
   res.send('Seu back está rodando');
 });
 
-// --- HEALTHCHECK ENDPOINT ---
+/**
+ * @swagger
+ * /health:
+ *   get:
+ *     summary: Healthcheck do sistema
+ *     description: Retorna status de saúde do servidor, banco de dados e métricas
+ *     tags: [Sistema]
+ *     security: []
+ *     responses:
+ *       200:
+ *         description: Sistema saudável
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/HealthCheck'
+ *       503:
+ *         description: Sistema com problemas
+ */
 app.get('/health', async (req, res) => {
   const healthcheck = {
     uptime: process.uptime(),

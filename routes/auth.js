@@ -25,9 +25,79 @@ const firstLoginLimiter = rateLimit({
   },
 });
 
-// Rota para login (POST) e primeiro acesso
-// Ordem: rate limiter -> validação -> controller
+/**
+ * @swagger
+ * /api/auth/login:
+ *   post:
+ *     summary: Autenticação de administrador
+ *     description: Realiza login de usuário administrador (admin_padrao ou admin_super)
+ *     tags: [Autenticação]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/LoginRequest'
+ *     responses:
+ *       200:
+ *         description: Login realizado com sucesso ou primeiro login detectado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               oneOf:
+ *                 - $ref: '#/components/schemas/LoginResponse'
+ *                 - $ref: '#/components/schemas/FirstLoginResponse'
+ *       401:
+ *         description: Senha incorreta
+ *       403:
+ *         description: Acesso negado - sem permissão de administrador
+ *       404:
+ *         description: Usuário não encontrado
+ *       429:
+ *         description: Muitas tentativas de login
+ */
 router.post('/login', loginLimiter, validateLogin, authController.login);
+
+/**
+ * @swagger
+ * /api/auth/primeiro-login:
+ *   post:
+ *     summary: Troca de senha no primeiro acesso
+ *     description: Permite que o usuário altere a senha padrão no primeiro login
+ *     tags: [Autenticação]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [userId, novaSenha, loginType]
+ *             properties:
+ *               userId:
+ *                 type: integer
+ *                 example: 1
+ *               novaSenha:
+ *                 type: string
+ *                 format: password
+ *                 example: NovaSenhaForte123
+ *               loginType:
+ *                 type: string
+ *                 enum: [admin_padrao, admin_super]
+ *                 example: admin_super
+ *     responses:
+ *       200:
+ *         description: Senha alterada com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/LoginResponse'
+ *       404:
+ *         description: Usuário não encontrado
+ *       429:
+ *         description: Muitas tentativas de troca de senha
+ */
 router.post('/primeiro-login', firstLoginLimiter, validateFirstLogin, authController.firstLogin);
 
 module.exports = router;

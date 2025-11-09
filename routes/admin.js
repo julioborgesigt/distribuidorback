@@ -1,5 +1,6 @@
 // /routes/admin.js (Limpo)
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const adminController = require('../controllers/adminController');
 const autenticarAdmin = require('../middlewares/autenticarAdmin');
@@ -39,6 +40,17 @@ const upload = multer({
   }
 });
 
+// Rate Limiter para Operações em Massa - Proteção contra DoS
+const bulkOperationsLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minuto
+  max: 10, // Máximo 10 operações em massa por minuto
+  message: {
+    error: 'Muitas operações em massa. Aguarde 1 minuto antes de tentar novamente.'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Aplica o middleware a todas as rotas deste módulo:
 router.use(autenticarAdmin);
 
@@ -75,9 +87,9 @@ router.post('/assign', adminController.assignProcesses);
 router.post('/manual-assign', validateManualAssign, adminController.manualAssignProcess);
 router.post('/pre-cadastro', validatePreCadastro, adminController.preCadastro);
 router.post('/reset-password', validateResetPassword, adminController.resetPassword);
-router.post('/bulk-assign', validateBulkAssign, adminController.bulkAssign);
-router.post('/bulk-delete', validateBulkOperation, adminController.bulkDelete);
-router.post('/bulk-cumprido', validateBulkOperation, adminController.bulkCumprido);
+router.post('/bulk-assign', bulkOperationsLimiter, validateBulkAssign, adminController.bulkAssign);
+router.post('/bulk-delete', bulkOperationsLimiter, validateBulkOperation, adminController.bulkDelete);
+router.post('/bulk-cumprido', bulkOperationsLimiter, validateBulkOperation, adminController.bulkCumprido);
 router.post('/update-intim', validateUpdateIntim, adminController.updateIntim);
 router.post('/delete-matricula', validateDeleteMatricula, adminController.deleteMatricula);
 

@@ -76,99 +76,6 @@ const parseBrazilianDate = (dateStr) => {
 };
 
 /**
- * Gera uma senha aleatória segura
- * @param {number} length - Comprimento da senha (padrão: 12)
- * @returns {string} Senha gerada
- */
-const generateSecurePassword = (length = 12) => {
-  const lowercase = 'abcdefghijklmnopqrstuvwxyz';
-  const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  const numbers = '0123456789';
-  const symbols = '!@#$%^&*()_+-=[]{}|;:,.<>?';
-
-  const allChars = lowercase + uppercase + numbers + symbols;
-
-  let password = '';
-
-  // Garantir pelo menos um de cada tipo
-  password += lowercase[Math.floor(Math.random() * lowercase.length)];
-  password += uppercase[Math.floor(Math.random() * uppercase.length)];
-  password += numbers[Math.floor(Math.random() * numbers.length)];
-  password += symbols[Math.floor(Math.random() * symbols.length)];
-
-  // Preencher o resto
-  for (let i = password.length; i < length; i++) {
-    password += allChars[Math.floor(Math.random() * allChars.length)];
-  }
-
-  // Embaralhar
-  return password.split('').sort(() => Math.random() - 0.5).join('');
-};
-
-/**
- * Cria um objeto de resposta padronizado para sucesso
- * @param {*} data - Dados a serem retornados
- * @param {string} message - Mensagem opcional
- * @returns {Object} Resposta padronizada
- */
-const successResponse = (data, message = null) => {
-  const response = {
-    success: true,
-    data,
-  };
-
-  if (message) {
-    response.message = message;
-  }
-
-  return response;
-};
-
-/**
- * Cria um objeto de resposta padronizado para erro
- * @param {string} error - Mensagem de erro
- * @param {number} statusCode - Código de status HTTP
- * @param {*} details - Detalhes adicionais (apenas em desenvolvimento)
- * @returns {Object} Resposta de erro padronizada
- */
-const errorResponse = (error, statusCode = 500, details = null) => {
-  const response = {
-    success: false,
-    error,
-    statusCode,
-  };
-
-  if (process.env.NODE_ENV === 'development' && details) {
-    response.details = details;
-  }
-
-  return response;
-};
-
-/**
- * Wrapper para async/await em rotas Express
- * Captura erros e passa para o middleware de erro
- * @param {Function} fn - Função assíncrona do controller
- * @returns {Function} Middleware Express
- */
-const asyncHandler = (fn) => {
-  return (req, res, next) => {
-    Promise.resolve(fn(req, res, next)).catch(next);
-  };
-};
-
-/**
- * Valida se um IP está em uma lista de IPs permitidos
- * @param {string} ip - IP a ser validado
- * @param {string[]} allowedIPs - Lista de IPs permitidos
- * @returns {boolean} True se permitido
- */
-const isAllowedIP = (ip, allowedIPs = []) => {
-  if (!allowedIPs || allowedIPs.length === 0) return true;
-  return allowedIPs.includes(ip);
-};
-
-/**
  * Extrai o IP real da requisição (considerando proxies)
  * @param {Object} req - Objeto de requisição Express
  * @returns {string} IP do cliente
@@ -187,10 +94,5 @@ module.exports = {
   isValidPassword,
   sanitizeString,
   parseBrazilianDate,
-  generateSecurePassword,
-  successResponse,
-  errorResponse,
-  asyncHandler,
-  isAllowedIP,
   getRealIP,
 };

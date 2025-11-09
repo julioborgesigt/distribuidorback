@@ -11,8 +11,7 @@ module.exports = (sequelize) => {
     matricula: {
       type: DataTypes.STRING(20),
       allowNull: false,
-      // NOTA: unique removido temporariamente para evitar criação de índices duplicados
-      // O índice UNIQUE deve ser criado manualmente no banco (ver scripts/fix-duplicate-indexes.sql)
+      unique: true, // ✅ REATIVADO após correção de índices duplicados
       validate: {
         notEmpty: true,
         len: [1, 20]

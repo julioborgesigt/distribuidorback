@@ -1,13 +1,17 @@
 {
   "name": "gerenciador-processos",
-  "version": "1.0.0",
-  "description": "Sistema de gerenciamento de processos",
+  "version": "1.2.0",
+  "description": "Sistema de gerenciamento de processos judiciais com autenticação JWT e controle de acesso",
   "main": "server.js",
+  "author": "",
+  "license": "UNLICENSED",
+  "private": true,
   "scripts": {
     "start": "NODE_ENV=production node server.js",
     "dev": "NODE_ENV=development nodemon server.js",
     "check": "node -c server.js && node -c controllers/*.js && node -c middlewares/*.js && node -c utils/*.js",
     "check:security": "npm audit && npm outdated",
+    "fix-indexes": "node scripts/fix-indexes.js",
     "logs:view": "tail -f logs/combined.log",
     "logs:errors": "tail -f logs/error.log",
     "logs:clear": "rm -f logs/*.log && mkdir -p logs",
@@ -30,5 +34,8 @@
     "sequelize": "^6.31.1",
     "winston": "^3.18.3",
     "xss": "^1.0.15"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
   }
 }

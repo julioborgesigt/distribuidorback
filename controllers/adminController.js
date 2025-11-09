@@ -439,8 +439,8 @@ exports.preCadastro = async (req, res) => {
   }
 
   try {
-    // CORREÇÃO: Criptografa a senha ANTES de qualquer ação
-    const senhaHasheada = bcryptjs.hashSync(senha, 10);
+    // CORREÇÃO: Criptografa a senha ANTES de qualquer ação (assíncrono)
+    const senhaHasheada = await bcryptjs.hash(senha, 10);
 
     // Verifica se já existe um usuário com a mesma matrícula
     const existingUser = await User.findOne({ where: { matricula } });
@@ -450,7 +450,7 @@ exports.preCadastro = async (req, res) => {
         existingUser.nome = nome;
         // Para que o usuário realize o primeiro login, definimos a senha para o hash de "12345678"
         // e marcamos senha_padrao como verdadeiro
-        existingUser.senha = bcryptjs.hashSync('12345678', 10); // <-- CORRIGIDO
+        existingUser.senha = await bcryptjs.hash('12345678', 10); // <-- CORRIGIDO
         existingUser.senha_padrao = true;
         existingUser.admin_padrao = admin_padrao;
         existingUser.admin_super = admin_super;
@@ -465,12 +465,12 @@ exports.preCadastro = async (req, res) => {
     }
 
     // Se não existir, cria o usuário com a senha já criptografada
-    await User.create({ 
-      matricula, 
-      nome, 
+    await User.create({
+      matricula,
+      nome,
       senha: senhaHasheada, // <-- CORRIGIDO
-      admin_padrao, 
-      admin_super 
+      admin_padrao,
+      admin_super
     });
     res.send('Pré-cadastro realizado com sucesso.');
   } catch (error) {
@@ -493,8 +493,8 @@ exports.resetPassword = async (req, res) => {
       return res.status(404).send('Usuário não encontrado.');
     }
 
-    // CORREÇÃO: Define a senha para o HASH de "12345678"
-    user.senha = bcryptjs.hashSync('12345678', 10); 
+    // CORREÇÃO: Define a senha para o HASH de "12345678" (assíncrono)
+    user.senha = await bcryptjs.hash('12345678', 10);
     user.senha_padrao = 1;  // Marca como senha padrão após reset
     await user.save();
 

@@ -11,7 +11,11 @@ module.exports = (sequelize) => {
     numero_processo: {
       type: DataTypes.STRING(50),
       allowNull: false,
-     
+      unique: true, // Evita duplicação de processos
+      validate: {
+        notEmpty: true,
+        len: [1, 50]
+      }
     },
     prazo_processual: {
       type: DataTypes.STRING(20),
@@ -46,7 +50,10 @@ module.exports = (sequelize) => {
     observacoes: {
       type: DataTypes.STRING(100),
       allowNull: false,
-      defaultValue: ''
+      defaultValue: '',
+      validate: {
+        len: [0, 100]
+      }
     }
     
   }, {

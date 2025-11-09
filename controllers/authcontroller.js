@@ -37,8 +37,8 @@ exports.login = async (req, res) => {
     }
     // --- Fim da validação de permissão ---
 
-    // Verificação de senha
-    const senhaValida = bcryptjs.compareSync(senha, user.senha);
+    // Verificação de senha (assíncrona para não bloquear o event loop)
+    const senhaValida = await bcryptjs.compare(senha, user.senha);
     if (!senhaValida) {
       return res.status(401).json({ error: 'Senha incorreta' });
     }
@@ -87,7 +87,7 @@ exports.firstLogin = async (req, res) => {
     if (!user) {
       return res.status(404).json({ error: 'Usuário não encontrado' });
     }
-    user.senha = bcryptjs.hashSync(novaSenha, 10);
+    user.senha = await bcryptjs.hash(novaSenha, 10);
     user.senha_padrao = false;
     await user.save();
     

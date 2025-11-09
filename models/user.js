@@ -11,15 +11,27 @@ module.exports = (sequelize) => {
     matricula: {
       type: DataTypes.STRING(20),
       allowNull: false,
-      
+      unique: true, // Evita duplicação de matrículas
+      validate: {
+        notEmpty: true,
+        len: [1, 20]
+      }
     },
     nome: {
       type: DataTypes.STRING(100),
-      allowNull: false
+      allowNull: false,
+      validate: {
+        notEmpty: true,
+        len: [1, 100]
+      }
     },
     senha: {
       type: DataTypes.STRING(100),
-      allowNull: false
+      allowNull: false,
+      validate: {
+        notEmpty: true,
+        len: [8, 100]
+      }
     },
     // Novo campo para identificar se \u00e9 a senha padr\u00e3o
     senha_padrao: {

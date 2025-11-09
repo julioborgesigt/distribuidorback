@@ -58,7 +58,7 @@ module.exports = (sequelize) => {
     
   }, {
     tableName: 'processos',
-    timestamps: true,  // ✅ HABILITADO para auditoria
+    timestamps: false,  // ✅ HABILITADO para auditoria
     createdAt: 'created_at',
     updatedAt: 'updated_at'
   });

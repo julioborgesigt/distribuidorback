@@ -31,9 +31,17 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
     },
   },
+  crossOriginEmbedderPolicy: false, // Permite embedding se necessário
 }));
 
 // Configuração de CORS Segura
@@ -89,7 +97,12 @@ app.use(cors({
   maxAge: 600 // Cache da preflight request por 10 minutos
 }));
 
-const PORT = process.env.PORT || 3000;
+// Validação e parsing de PORT
+const PORT = parseInt(process.env.PORT, 10) || 3000;
+if (PORT < 1 || PORT > 65535) {
+  logger.error(`Porta inválida: ${PORT}. Deve estar entre 1 e 65535.`);
+  process.exit(1);
+}
 
 // Middleware de logging HTTP
 app.use(httpLogger);

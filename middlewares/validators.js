@@ -42,7 +42,7 @@ const validateFirstLogin = [
   body('novaSenha')
     .notEmpty().withMessage('Nova senha é obrigatória')
     .isLength({ min: 8, max: 100 }).withMessage('Senha deve ter entre 8 e 100 caracteres')
-    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/).withMessage('Senha deve conter pelo menos uma letra maiúscula, uma minúscula e um número'),
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/).withMessage('Senha deve conter pelo menos uma letra maiúscula, uma minúscula e um número. Símbolos são opcionais mas recomendados'),
 
   body('loginType')
     .notEmpty().withMessage('Tipo de login é obrigatório')

@@ -37,26 +37,56 @@ app.use(helmet({
 }));
 
 // Configuração de CORS Segura
+// Lista de origens permitidas
 const allowedOrigins = [
   'https://distribuidorvue.onrender.com',
-  process.env.FRONTEND_URL
+  'http://localhost:8080',
+  'http://localhost:3000',
+  'http://127.0.0.1:8080',
+  process.env.FRONTEND_URL,
+  process.env.FRONTEND_URL_2,
+  process.env.FRONTEND_URL_3
 ].filter(Boolean);
+
+// Log das origens permitidas na inicialização
+logger.info('Origens CORS permitidas:', { origins: allowedOrigins });
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Permite requisições sem origin (mobile apps, Postman, etc.) apenas em desenvolvimento
-    if (!origin && process.env.NODE_ENV !== 'production') {
+    // Log de debugging para ver qual origem está tentando acessar
+    logger.debug('CORS - Requisição de origem:', {
+      origin: origin || 'sem origin',
+      allowed: allowedOrigins
+    });
+
+    // Permite requisições sem origin (Postman, curl, apps mobile, etc.)
+    if (!origin) {
+      logger.debug('CORS - Requisição sem origin permitida');
       return callback(null, true);
     }
+
+    // Verifica se a origem está na lista de permitidas
     if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Origem não permitida pelo CORS'));
+      logger.debug('CORS - Origem permitida:', { origin });
+      return callback(null, true);
     }
+
+    // Origem não permitida
+    logger.warn('CORS - Origem bloqueada:', {
+      origin,
+      allowedOrigins
+    });
+
+    // Retornar erro detalhado
+    const error = new Error(`Origem não permitida pelo CORS: ${origin}`);
+    error.statusCode = 403;
+    callback(error);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  maxAge: 600 // Cache da preflight request por 10 minutos
 }));
 
 const PORT = process.env.PORT || 3000;

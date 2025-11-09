@@ -2,11 +2,15 @@
 const { User } = require('../models');
 const bcryptjs = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const logger = require('../utils/logger');
+const { getRealIP } = require('../utils/helpers');
 const JWT_SECRET = process.env.JWT_SECRET;
 
 exports.login = async (req, res) => {
-  console.log("login: Iniciando login, corpo da requisição:", req.body);
   const { matricula, senha, loginType } = req.body;
+  const clientIP = getRealIP(req);
+
+  logger.info('Tentativa de login', { matricula, loginType, ip: clientIP });
 
   // --- 1. VALIDAÇÃO DO TIPO DE LOGIN (NOVO) ---
   // Exige que o loginType seja especificado como admin
@@ -17,6 +21,7 @@ exports.login = async (req, res) => {
   try {
     const user = await User.findOne({ where: { matricula } });
     if (!user) {
+      logger.logAuthAttempt(false, matricula, clientIP, 'Usuário não encontrado');
       return res.status(404).json({ error: 'Usuário não encontrado' });
     }
     
@@ -33,6 +38,8 @@ exports.login = async (req, res) => {
 
     // Se, após as verificações, ele não for um admin válido, rejeita.
     if (!effectiveLoginType) {
+        logger.logAuthAttempt(false, matricula, clientIP, 'Permissão insuficiente');
+        logger.logSecurityEvent('Tentativa de acesso sem permissão', { matricula, loginType, ip: clientIP });
         return res.status(403).json({ error: 'Acesso negado. O usuário não possui as permissões de administrador solicitadas.' });
     }
     // --- Fim da validação de permissão ---
@@ -40,15 +47,16 @@ exports.login = async (req, res) => {
     // Verificação de senha (assíncrona para não bloquear o event loop)
     const senhaValida = await bcryptjs.compare(senha, user.senha);
     if (!senhaValida) {
+      logger.logAuthAttempt(false, matricula, clientIP, 'Senha incorreta');
       return res.status(401).json({ error: 'Senha incorreta' });
     }
     
     // Lógica de primeiro login
     if (user.senha_padrao) {
-      console.log("login: Este é seu primeiro login.");
+      logger.info('Primeiro login detectado', { userId: user.id, matricula });
       return res.json({ firstLogin: true, userId: user.id, loginType: effectiveLoginType });
     } else {
-      console.log("login: Este não é seu primeiro login. Gerando token...");
+      logger.logAuthAttempt(true, matricula, clientIP);
       const token = jwt.sign({ id: user.id, loginType: effectiveLoginType }, JWT_SECRET, { expiresIn: '2h' });
       
       let loginUser = {
@@ -68,14 +76,20 @@ exports.login = async (req, res) => {
       return res.json({ token, user: loginUser });
     }
   } catch (error) {
-    console.error("login: Erro interno:", error);
+    logger.error('Erro no processo de login', {
+      error: error.message,
+      stack: error.stack,
+      matricula,
+      ip: clientIP
+    });
     return res.status(500).json({ error: 'Erro interno' });
   }
 };
 
 
 exports.firstLogin = async (req, res) => {
-  const { userId, novaSenha, loginType } = req.body; 
+  const { userId, novaSenha, loginType } = req.body;
+  const clientIP = getRealIP(req); 
 
   // --- VALIDAÇÃO DO TIPO DE LOGIN (NOVO) ---
   if (!loginType || (loginType !== 'admin_super' && loginType !== 'admin_padrao')) {
@@ -90,7 +104,13 @@ exports.firstLogin = async (req, res) => {
     user.senha = await bcryptjs.hash(novaSenha, 10);
     user.senha_padrao = false;
     await user.save();
-    
+
+    logger.info('Senha alterada no primeiro login', {
+      userId: user.id,
+      matricula: user.matricula,
+      ip: clientIP
+    });
+
     // O loginType enviado já é o 'effectiveLoginType'
     const token = jwt.sign({ id: user.id, loginType: loginType }, JWT_SECRET, { expiresIn: '2h' });
     
@@ -109,7 +129,12 @@ exports.firstLogin = async (req, res) => {
 
     return res.json({ token, user: loginUser });
   } catch (error) {
-    console.error(error);
+    logger.error('Erro no primeiro login', {
+      error: error.message,
+      stack: error.stack,
+      userId,
+      ip: clientIP
+    });
     return res.status(500).json({ error: 'Erro interno' });
   }
 };

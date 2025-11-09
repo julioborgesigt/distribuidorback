@@ -6,13 +6,21 @@ const helmet = require('helmet');
 const { sequelize } = require('./models');
 const adminRoutes = require('./routes/admin');
 const authRoutes = require('./routes/auth');
+const logger = require('./utils/logger');
+const {
+  errorHandler,
+  notFoundHandler,
+  httpLogger,
+  validateJSON
+} = require('./middlewares/errorHandler');
+const { sanitizeInput } = require('./middlewares/sanitizer');
 // const userRoutes = require('./routes/user'); // REMOVIDO
 
 // Validação de Variáveis de Ambiente Obrigatórias
 const requiredEnvVars = ['DB_HOST', 'DB_USER', 'DB_PASS', 'DB_NAME', 'JWT_SECRET'];
 const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
 if (missingVars.length > 0) {
-  console.error(`ERRO: Variáveis de ambiente obrigatórias não definidas: ${missingVars.join(', ')}`);
+  logger.error(`Variáveis de ambiente obrigatórias não definidas: ${missingVars.join(', ')}`);
   process.exit(1);
 }
 
@@ -53,8 +61,18 @@ app.use(cors({
 
 const PORT = process.env.PORT || 3000;
 
+// Middleware de logging HTTP
+app.use(httpLogger);
+
+// Parsers de JSON e URL-encoded
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Middleware para validar JSON
+app.use(validateJSON);
+
+// Middleware de sanitização XSS
+app.use(sanitizeInput);
 
 // --- 1. ROTAS DE API ---
 // Todas as suas rotas de API (agora apenas admin e auth)
@@ -78,6 +96,7 @@ app.get('/health', async (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
+    logger.error('Healthcheck falhou - Database disconnected', { error: error.message });
     res.status(503).json({
       status: 'error',
       database: 'disconnected',
@@ -85,6 +104,15 @@ app.get('/health', async (req, res) => {
     });
   }
 });
+
+// --- MIDDLEWARE DE ERRO ---
+// Deve vir DEPOIS de todas as rotas
+
+// 404 - Rota não encontrada
+app.use(notFoundHandler);
+
+// Tratamento de erros global
+app.use(errorHandler);
 
 // --- 3. INICIAR SERVIDOR ---
 // SEGURANÇA: Não usar 'alter: true' em produção para evitar perda de dados
@@ -94,15 +122,35 @@ const syncOptions = process.env.NODE_ENV === 'production'
 
 sequelize.sync(syncOptions)
   .then(async () => {
-    console.log('Banco de dados sincronizado.');
+    logger.info('Banco de dados sincronizado com sucesso');
 
     // Inicia o servidor
     app.listen(PORT, () => {
-      console.log(`Servidor API rodando na porta ${PORT}`);
-      console.log(`Ambiente: ${process.env.NODE_ENV || 'development'}`);
+      logger.info(`Servidor API rodando na porta ${PORT}`);
+      logger.info(`Ambiente: ${process.env.NODE_ENV || 'development'}`);
+      logger.info(`Logs salvos em: ./logs/`);
     });
   })
   .catch(err => {
-    console.error('Erro ao sincronizar o banco de dados:', err);
+    logger.error('Erro ao sincronizar o banco de dados', {
+      error: err.message,
+      stack: err.stack
+    });
     process.exit(1);
   });
+
+// Tratamento de erros não capturados
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled Rejection', {
+    reason,
+    promise
+  });
+});
+
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught Exception', {
+    error: error.message,
+    stack: error.stack
+  });
+  process.exit(1);
+});

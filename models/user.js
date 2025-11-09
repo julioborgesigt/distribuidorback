@@ -51,7 +51,7 @@ module.exports = (sequelize) => {
     }
   }, {
     tableName: 'usuarios',
-    timestamps: true,  // ✅ HABILITADO para auditoria
+    timestamps: false,  // ✅ HABILITADO para auditoria
     createdAt: 'created_at',
     updatedAt: 'updated_at'
   });

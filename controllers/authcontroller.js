@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 const logger = require('../utils/logger');
 const { getRealIP } = require('../utils/helpers');
 const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_EXPIRATION = process.env.JWT_EXPIRATION || '2h';
 
 exports.login = async (req, res) => {
   const { matricula, senha, loginType } = req.body;
@@ -57,7 +58,7 @@ exports.login = async (req, res) => {
       return res.json({ firstLogin: true, userId: user.id, loginType: effectiveLoginType });
     } else {
       logger.logAuthAttempt(true, matricula, clientIP);
-      const token = jwt.sign({ id: user.id, loginType: effectiveLoginType }, JWT_SECRET, { expiresIn: '2h' });
+      const token = jwt.sign({ id: user.id, loginType: effectiveLoginType }, JWT_SECRET, { expiresIn: JWT_EXPIRATION });
       
       let loginUser = {
         id: user.id,
@@ -112,7 +113,7 @@ exports.firstLogin = async (req, res) => {
     });
 
     // O loginType enviado já é o 'effectiveLoginType'
-    const token = jwt.sign({ id: user.id, loginType: loginType }, JWT_SECRET, { expiresIn: '2h' });
+    const token = jwt.sign({ id: user.id, loginType: loginType }, JWT_SECRET, { expiresIn: JWT_EXPIRATION });
     
     let loginUser = { 
       id: user.id, 

@@ -3,6 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const compression = require('compression');
 const { sequelize } = require('./models');
 const adminRoutes = require('./routes/admin');
 const authRoutes = require('./routes/auth');
@@ -43,6 +44,9 @@ app.use(helmet({
   },
   crossOriginEmbedderPolicy: false, // Permite embedding se necessário
 }));
+
+// ✅ Compressão HTTP com gzip
+app.use(compression());
 
 // Configuração de CORS Segura
 // Lista de origens permitidas
@@ -131,20 +135,34 @@ app.get('/', (req, res) => {
 
 // --- HEALTHCHECK ENDPOINT ---
 app.get('/health', async (req, res) => {
+  const healthcheck = {
+    uptime: process.uptime(),
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    version: require('./package.json').version,
+    database: 'unknown',
+    memory: {
+      used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+      total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
+      unit: 'MB'
+    }
+  };
+
   try {
+    // Testa conexão com banco de dados
     await sequelize.authenticate();
-    res.status(200).json({
-      status: 'ok',
-      database: 'connected',
-      timestamp: new Date().toISOString()
-    });
+    healthcheck.database = 'connected';
+
+    res.status(200).json(healthcheck);
   } catch (error) {
     logger.error('Healthcheck falhou - Database disconnected', { error: error.message });
-    res.status(503).json({
-      status: 'error',
-      database: 'disconnected',
-      timestamp: new Date().toISOString()
-    });
+
+    healthcheck.status = 'error';
+    healthcheck.database = 'disconnected';
+    healthcheck.error = error.message;
+
+    res.status(503).json(healthcheck);
   }
 });
 
@@ -170,12 +188,15 @@ if (process.env.NODE_ENV !== 'production' && process.env.SEQUELIZE_ALTER === 'tr
 
 logger.info(`Sequelize sync options: ${JSON.stringify(syncOptions)}`);
 
+// Variável para armazenar a referência do servidor
+let server;
+
 sequelize.sync(syncOptions)
   .then(async () => {
     logger.info('Banco de dados sincronizado com sucesso');
 
-    // Inicia o servidor
-    app.listen(PORT, () => {
+    // Inicia o servidor e guarda referência
+    server = app.listen(PORT, () => {
       logger.info(`Servidor API rodando na porta ${PORT}`);
       logger.info(`Ambiente: ${process.env.NODE_ENV || 'development'}`);
       logger.info(`Logs salvos em: ./logs/`);
@@ -204,3 +225,44 @@ process.on('uncaughtException', (error) => {
   });
   process.exit(1);
 });
+
+// ✅ GRACEFUL SHUTDOWN
+// Função para fechar conexões gracefully
+const gracefulShutdown = async (signal) => {
+  logger.info(`${signal} recebido. Iniciando shutdown graceful...`);
+
+  if (!server) {
+    logger.warn('Servidor ainda não foi iniciado');
+    process.exit(0);
+  }
+
+  // Fecha o servidor HTTP (para de aceitar novas conexões)
+  server.close(async () => {
+    logger.info('Servidor HTTP fechado (não aceita mais conexões)');
+
+    try {
+      // Fecha conexão com o banco de dados
+      await sequelize.close();
+      logger.info('Conexão com banco de dados fechada');
+
+      logger.info('Shutdown graceful concluído com sucesso');
+      process.exit(0);
+    } catch (err) {
+      logger.error('Erro ao fechar conexões durante shutdown', {
+        error: err.message,
+        stack: err.stack
+      });
+      process.exit(1);
+    }
+  });
+
+  // Timeout de segurança: forçar shutdown após 10 segundos
+  setTimeout(() => {
+    logger.error('Shutdown forçado após timeout de 10 segundos');
+    process.exit(1);
+  }, 10000);
+};
+
+// Escutar sinais de término
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));

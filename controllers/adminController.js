@@ -2,11 +2,14 @@
 
 // const path = require('path'); // REMOVIDO
 const fs = require('fs');
+const fsPromises = require('fs').promises;
 const csvParser = require('csv-parser');
 const { sequelize, User, Process } = require('../models');
 const { Op, literal } = require('sequelize');
 const iconv = require('iconv-lite');
 const bcryptjs = require('bcryptjs');
+const logger = require('../utils/logger');
+const { getRealIP, isValidPassword } = require('../utils/helpers');
 // Função que enviava página HTML (REMOVIDA)
 // exports.getAdminPage = (req, res) => {
 //   res.sendFile(path.join(__dirname, '../public', 'admin.html'));
@@ -122,16 +125,30 @@ exports.uploadCSV = (req, res) => {
           }
         }
 
-        fs.unlinkSync(filePath);
+        await fsPromises.unlink(filePath);
+        logger.info('CSV importado com sucesso', {
+          totalRows: latestProcessesMap.size,
+          userId: req.userId
+        });
         res.send('CSV importado com sucesso. Registros mais recentes foram processados.');
 
       } catch (error) {
-        console.error(error);
+        logger.error('Erro ao salvar dados do CSV', {
+          error: error.message,
+          stack: error.stack,
+          userId: req.userId,
+          ip: getRealIP(req)
+        });
         res.status(500).send('Erro ao salvar dados do CSV.');
       }
     })
     .on('error', (error) => {
-      console.error(error);
+      logger.error('Erro ao ler o arquivo CSV', {
+        error: error.message,
+        stack: error.stack,
+        userId: req.userId,
+        ip: getRealIP(req)
+      });
       res.status(500).send('Erro ao ler o arquivo CSV.');
     });
 };
@@ -374,7 +391,12 @@ exports.listProcesses = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Erro ao buscar processos com paginação:', error);
+    logger.error('Erro ao buscar processos com paginação', {
+      error: error.message,
+      stack: error.stack,
+      userId: req.userId,
+      ip: getRealIP(req)
+    });
     res.status(500).json({ error: 'Erro interno do servidor', details: error.message });
   }
 };
@@ -391,12 +413,20 @@ exports.assignProcesses = async (req, res) => {
 // Atribuição manual de um processo
 exports.manualAssignProcess = async (req, res) => {
   const { numeroProcesso, matricula } = req.body;
-  console.log("Dados recebidos:", req.body);
+  logger.info('Atribuição manual de processo', {
+    numeroProcesso,
+    matricula,
+    userId: req.userId,
+    ip: getRealIP(req)
+  });
 
   try {
     const user = await User.findOne({ where: { matricula } });
     if (!user) {
-      console.log("Usuário não encontrado para a matrícula:", matricula);
+      logger.warn('Usuário não encontrado para atribuição', {
+        matricula,
+        userId: req.userId
+      });
       return res.status(404).send('Usuário não encontrado.');
     }
 
@@ -405,17 +435,30 @@ exports.manualAssignProcess = async (req, res) => {
 
     const process = await Process.findOne({ where: { numero_processo: numero } });
     if (!process) {
-      console.log("Processo não encontrado para o número:", numero);
+      logger.warn('Processo não encontrado para atribuição', {
+        numeroProcesso: numero,
+        userId: req.userId
+      });
       return res.status(404).send('Processo não encontrado.');
     }
 
     process.userId = user.id;
     await process.save();
 
-    console.log("Processo atualizado:", process);
+    logger.info('Processo atribuído com sucesso', {
+      processId: process.id,
+      numeroProcesso: process.numero_processo,
+      assignedTo: user.id,
+      assignedBy: req.userId
+    });
     res.send('Processo atribuído com sucesso.');
   } catch (error) {
-    console.error(error);
+    logger.error('Erro ao atribuir processo', {
+      error: error.message,
+      stack: error.stack,
+      userId: req.userId,
+      ip: getRealIP(req)
+    });
     res.status(500).send('Erro ao atribuir processo.');
   }
 };
@@ -426,6 +469,18 @@ exports.preCadastro = async (req, res) => {
 
   if (!matricula || !nome || !senha || !tipoCadastro) {
     return res.status(400).send('Campos obrigatórios ausentes.');
+  }
+
+  // ✅ VALIDAÇÃO DE FORÇA DA SENHA
+  if (!isValidPassword(senha)) {
+    logger.warn('Tentativa de cadastro com senha fraca', {
+      matricula,
+      userId: req.userId,
+      ip: getRealIP(req)
+    });
+    return res.status(400).json({
+      error: 'Senha deve ter pelo menos 8 caracteres, uma letra maiúscula, uma minúscula e um número'
+    });
   }
 
   // Define as flags conforme o valor de tipoCadastro
@@ -472,9 +527,20 @@ exports.preCadastro = async (req, res) => {
       admin_padrao,
       admin_super
     });
+    logger.info('Pré-cadastro realizado com sucesso', {
+      matricula,
+      tipoCadastro,
+      createdBy: req.userId
+    });
     res.send('Pré-cadastro realizado com sucesso.');
   } catch (error) {
-    console.error(error);
+    logger.error('Erro ao realizar pré-cadastro', {
+      error: error.message,
+      stack: error.stack,
+      matricula,
+      userId: req.userId,
+      ip: getRealIP(req)
+    });
     res.status(500).send('Erro ao realizar pré-cadastro.');
   }
 };
@@ -498,9 +564,21 @@ exports.resetPassword = async (req, res) => {
     user.senha_padrao = 1;  // Marca como senha padrão após reset
     await user.save();
 
+    logger.info('Senha resetada com sucesso', {
+      matricula,
+      userId: user.id,
+      resetBy: req.userId,
+      ip: getRealIP(req)
+    });
     res.send('Senha resetada com sucesso para "12345678".');
   } catch (error) {
-    console.error(error);
+    logger.error('Erro ao resetar senha', {
+      error: error.message,
+      stack: error.stack,
+      matricula,
+      userId: req.userId,
+      ip: getRealIP(req)
+    });
     res.status(500).send('Erro ao resetar senha.');
   }
 };
@@ -522,22 +600,43 @@ exports.deleteMatricula = async (req, res) => {
     const count = await Process.count({
       where: { userId: user.id }
     });
-    console.log('contagem de processos para o usuário:', count);
+    logger.info('Verificando processos atribuídos para exclusão de usuário', {
+      matricula,
+      userId: user.id,
+      processCount: count
+    });
     // 2. Se a contagem for maior que zero, bloquear a exclusão
     if (count > 0) {
+      logger.warn('Tentativa de exclusão de usuário com processos atribuídos', {
+        matricula,
+        userId: user.id,
+        processCount: count,
+        requestedBy: req.userId
+      });
       // 409 Conflict é o status HTTP correto para esta situação
-      return res.status(409).json({ 
-        error: `Este usuário não pode ser excluído pois ainda possui ${count} processo(s) atribuído(s).` 
+      return res.status(409).json({
+        error: `Este usuário não pode ser excluído pois ainda possui ${count} processo(s) atribuído(s).`
       });
     }
     // --- FIM DA NOVA VALIDAÇÃO ---
 
     // 3. Se a contagem for 0, prosseguir com a exclusão
     await user.destroy();
+    logger.info('Usuário deletado com sucesso', {
+      matricula,
+      deletedBy: req.userId,
+      ip: getRealIP(req)
+    });
     res.status(200).json({ message: 'Usuário deletado com sucesso.' });
 
   } catch (error) {
-    console.error(error);
+    logger.error('Erro ao deletar usuário', {
+      error: error.message,
+      stack: error.stack,
+      matricula,
+      userId: req.userId,
+      ip: getRealIP(req)
+    });
     // Adiciona um 'catch' genérico para erros de constraint
     if (error.name === 'SequelizeForeignKeyConstraintError') {
          return res.status(409).json({ error: 'Este usuário não pode ser excluído pois está referenciado em outros registros.' });
@@ -561,9 +660,21 @@ exports.bulkAssign = async (req, res) => {
         id: processIds
       }
     });
+    logger.info('Atribuição em massa realizada', {
+      processCount: processIds.length,
+      assignedTo: user.id,
+      matricula,
+      assignedBy: req.userId,
+      ip: getRealIP(req)
+    });
     res.send("Atribuição em massa realizada com sucesso.");
   } catch (error) {
-    console.error(error);
+    logger.error('Erro ao realizar atribuição em massa', {
+      error: error.message,
+      stack: error.stack,
+      userId: req.userId,
+      ip: getRealIP(req)
+    });
     res.status(500).send("Erro ao realizar atribuição em massa.");
   }
 };
@@ -577,9 +688,19 @@ exports.bulkDelete = async (req, res) => {
         id: processIds
       }
     });
+    logger.info('Exclusão em massa realizada', {
+      processCount: processIds.length,
+      deletedBy: req.userId,
+      ip: getRealIP(req)
+    });
     res.send("Exclusão em massa realizada com sucesso.");
   } catch (error) {
-    console.error(error);
+    logger.error('Erro ao realizar exclusão em massa', {
+      error: error.message,
+      stack: error.stack,
+      userId: req.userId,
+      ip: getRealIP(req)
+    });
     res.status(500).send("Erro ao realizar exclusão em massa.");
   }
 };
@@ -593,9 +714,19 @@ exports.bulkCumprido = async (req, res) => {
         id: processIds
       }
     });
+    logger.info('Processos marcados como cumpridos em massa', {
+      processCount: processIds.length,
+      markedBy: req.userId,
+      ip: getRealIP(req)
+    });
     res.send("Processos marcados como cumpridos com sucesso.");
   } catch (error) {
-    console.error(error);
+    logger.error('Erro ao atualizar status em massa', {
+      error: error.message,
+      stack: error.stack,
+      userId: req.userId,
+      ip: getRealIP(req)
+    });
     res.status(500).send("Erro ao atualizar status em massa.");
   }
 };
@@ -610,21 +741,49 @@ exports.updateIntim = async (req, res) => {
     }
     process.reiteracoes = reiteracoes;
     await process.save();
+    logger.info('Número de reiterações atualizado', {
+      processId,
+      reiteracoes,
+      updatedBy: req.userId
+    });
     res.send('Número de intim atualizado com sucesso.');
   } catch (error) {
-    console.error(error);
+    logger.error('Erro ao atualizar número de intim', {
+      error: error.message,
+      stack: error.stack,
+      processId,
+      userId: req.userId,
+      ip: getRealIP(req)
+    });
     res.status(500).send('Erro ao atualizar número de intim.');
   }
 };
 
-// Lista usuários (apenas matrícula e nome)
+// Lista usuários (apenas matrícula e nome) - COM PAGINAÇÃO
 exports.listUsers = async (req, res) => {
   try {
-    // Adicionamos 'id' aos atributos
-    const users = await User.findAll({ attributes: ['id', 'matricula', 'nome'] }); 
+    // ✅ PAGINAÇÃO ADICIONADA
+    const { limit = 1000, offset = 0 } = req.query;
+
+    const users = await User.findAll({
+      attributes: ['id', 'matricula', 'nome'],
+      limit: parseInt(limit, 10),
+      offset: parseInt(offset, 10),
+      order: [['nome', 'ASC']]
+    });
+
+    logger.info('Lista de usuários consultada', {
+      count: users.length,
+      requestedBy: req.userId
+    });
     res.json(users);
   } catch (error) {
-    console.error(error);
+    logger.error('Erro ao buscar usuários', {
+      error: error.message,
+      stack: error.stack,
+      userId: req.userId,
+      ip: getRealIP(req)
+    });
     res.status(500).send('Erro ao buscar usuários.');
   }
 };
@@ -652,7 +811,13 @@ exports.updateObservacoes = async (req, res) => {
     res.status(200).json(processo);
 
   } catch (error) {
-    console.error('Erro ao salvar observação:', error);
+    logger.error('Erro ao salvar observação', {
+      error: error.message,
+      stack: error.stack,
+      processId: req.params.id,
+      userId: req.userId,
+      ip: getRealIP(req)
+    });
     res.status(500).json({ error: 'Erro interno do servidor' });
   }
 };
@@ -683,7 +848,13 @@ exports.markAsCumprido = async (req, res) => {
     res.status(200).json(processoAtualizado);
 
   } catch (error) {
-    console.error('Erro ao marcar como cumprido:', error);
+    logger.error('Erro ao marcar como cumprido', {
+      error: error.message,
+      stack: error.stack,
+      processId: req.params.id,
+      userId: req.userId,
+      ip: getRealIP(req)
+    });
     res.status(500).json({ error: 'Erro interno do servidor' });
   }
 };
@@ -707,13 +878,19 @@ exports.unmarkAsCumprido = async (req, res) => {
 
     // Recarrega o processo com o "User" para enviar de volta ao frontend
     const processoAtualizado = await Process.findByPk(id, {
-      include: [{ model: User, attributes: ['nome'] }] 
+      include: [{ model: User, attributes: ['nome'] }]
     });
 
     res.status(200).json(processoAtualizado);
 
   } catch (error) {
-    console.error('Erro ao desmarcar como cumprido:', error);
+    logger.error('Erro ao desmarcar como cumprido', {
+      error: error.message,
+      stack: error.stack,
+      processId: req.params.id,
+      userId: req.userId,
+      ip: getRealIP(req)
+    });
     res.status(500).json({ error: 'Erro interno do servidor' });
   }
 };
@@ -733,7 +910,12 @@ exports.getUnassignedCount = async (req, res) => {
     res.status(200).json({ count });
 
   } catch (error) {
-    console.error('Erro ao contar processos não atribuídos:', error);
+    logger.error('Erro ao contar processos não atribuídos', {
+      error: error.message,
+      stack: error.stack,
+      userId: req.userId,
+      ip: getRealIP(req)
+    });
     res.status(500).json({ error: 'Erro interno do servidor' });
   }
 };
@@ -864,7 +1046,12 @@ exports.getDashboardStats = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Erro ao buscar estatísticas do dashboard:', error);
+    logger.error('Erro ao buscar estatísticas do dashboard', {
+      error: error.message,
+      stack: error.stack,
+      userId: req.userId,
+      ip: getRealIP(req)
+    });
     res.status(500).json({ error: 'Erro interno do servidor', details: error.message });
   }
 };

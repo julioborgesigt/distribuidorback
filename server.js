@@ -145,10 +145,17 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 // --- 3. INICIAR SERVIDOR ---
-// SEGURANÇA: Não usar 'alter: true' em produção para evitar perda de dados
-const syncOptions = process.env.NODE_ENV === 'production'
-  ? { } // Em produção, apenas valida as models
-  : { alter: true }; // Em desenvolvimento, permite alterações
+// SEGURANÇA: Não usar 'alter: true' por padrão para evitar perda de dados
+// ✅ MELHORIA: Requer variável de ambiente explícita para usar alter
+let syncOptions = {};
+
+if (process.env.NODE_ENV !== 'production' && process.env.SEQUELIZE_ALTER === 'true') {
+  logger.warn('⚠️  ATENÇÃO: Sequelize alter ativado! Pode causar perda de dados.');
+  logger.warn('⚠️  Colunas removidas do model serão apagadas do banco de dados.');
+  syncOptions.alter = true;
+}
+
+logger.info(`Sequelize sync options: ${JSON.stringify(syncOptions)}`);
 
 sequelize.sync(syncOptions)
   .then(async () => {

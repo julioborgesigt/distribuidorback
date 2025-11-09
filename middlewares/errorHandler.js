@@ -3,16 +3,36 @@
 
 const logger = require('../utils/logger');
 
+/**
+ * Sanitiza o body da requisição removendo campos sensíveis antes de logar
+ * @param {Object} body - Body da requisição
+ * @returns {Object} Body sanitizado
+ */
+const sanitizeBodyForLog = (body) => {
+  if (!body || typeof body !== 'object') return body;
+
+  const sanitized = { ...body };
+  const sensitiveFields = ['senha', 'novaSenha', 'senhaAtual', 'password', 'token', 'jwt'];
+
+  sensitiveFields.forEach(field => {
+    if (sanitized[field]) {
+      sanitized[field] = '[REDACTED]';
+    }
+  });
+
+  return sanitized;
+};
+
 // Middleware para tratar erros não capturados
 const errorHandler = (err, req, res, next) => {
-  // Log do erro
+  // Log do erro (com body sanitizado)
   logger.error(`Error: ${err.message}`, {
     stack: err.stack,
     url: req.url,
     method: req.method,
     ip: req.ip,
     userId: req.userId || 'anonymous',
-    body: req.body,
+    body: sanitizeBodyForLog(req.body),
   });
 
   // Determinar status code
